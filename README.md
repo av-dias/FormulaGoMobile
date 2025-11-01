@@ -1,0 +1,9 @@
+# FormulaGo
+
+<!-- Version History -->
+
+### VERSION HISTORY
+
+- 1.0.0
+
+  - Initial Version with basic UI elements
