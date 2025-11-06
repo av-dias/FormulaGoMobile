@@ -1,22 +1,38 @@
 import { StyleSheet } from "react-native";
 
 import { fetchWithTimeout } from "@/api/fetch";
-import Carrossel from "@/components/carrossel/carrossel";
-import { FlatCalendar } from "@/components/flatCalender/FlatCalender";
 import { Text, View } from "@/components/Themed";
 import UsableScreen from "@/components/usableScreen";
 import { SessionType } from "@/models/SessionType";
 import { WeatherType } from "@/models/WeatherType";
-import { formatISODateToParts } from "@/utility/calendar";
 import { dark, pallet } from "@/utility/colors";
 import { icons } from "@/utility/icons";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { ScrollView } from "react-native-gesture-handler";
 
-const loadedDate = (data: any) => {
-  const date = formatISODateToParts(data.date);
-  return `Loaded from ${date.day || "-"} ${date.time || "-"}`;
+const loadPressureLabel = (pressure: number) => {
+  if (pressure < 1000) return "Low";
+  if (pressure >= 1000 && pressure <= 1020) return "Normal";
+  if (pressure > 1020) return "High";
+};
+
+const loadTemperatureColor = (temperature: number) => {
+  if (temperature < 10) return "lightblue";
+  if (temperature < 18) return "#0030cfff";
+  if (temperature < 20) return "lightgreen";
+  if (temperature < 30) return "#c5b802ff";
+  if (temperature < 40) return "orange";
+  if (temperature < 50) return "#db0000ff";
+  return "transparent";
+};
+
+const loadRainfallColor = (rainfall: number) => {
+  if (rainfall < 20) return "transparent";
+  if (rainfall < 33) return "lightgray";
+  if (rainfall < 66) return "yellow";
+  if (rainfall <= 100) return "red";
+  return "transparent";
 };
 
 const loadIcons = (data: WeatherType) => {
@@ -26,21 +42,23 @@ const loadIcons = (data: WeatherType) => {
         icon.value = `${
           data.air_temperature != null ? data.air_temperature : "-"
         } °C`;
+        icon.color = loadTemperatureColor(Number(data.air_temperature));
         break;
       case "Humidity":
         icon.value = `${data.humidity != null ? data.humidity : "-"} %`;
         break;
       case "Pressure":
-        icon.value = `${data.pressure != null ? data.pressure : "-"} hPa`;
+        icon.value = loadPressureLabel(data.pressure);
         break;
       case "Rain":
         icon.value = `${data.rainfall != null ? data.rainfall : "-"} %`;
-        icon.color = Number(data.rainfall) == 0 ? "gray" : "blue";
+        icon.color = loadRainfallColor(Number(data.rainfall));
         break;
       case "Temperature":
         icon.value = `${
           data.track_temperature != null ? data.track_temperature : "-"
         } °C`;
+        icon.color = loadTemperatureColor(Number(data.track_temperature));
         break;
       case "Wind Direction":
         icon.value = `${
@@ -59,107 +77,67 @@ const loadIcons = (data: WeatherType) => {
 };
 
 export default function TabOneScreen() {
-  const [weather, setWeather] = React.useState<WeatherType>({} as WeatherType);
-  const [latestUpdate, setLatestUpdate] = React.useState<string | null>(null);
-  const [date, setDate] = React.useState<Date>(new Date());
-  const [sessions, setSessions] = React.useState<SessionType[] | null>(null);
-  const [selectedSession, setSelectedSession] = React.useState<SessionType>(
-    {} as SessionType
-  );
+  const [latestUpdate, setLatestUpdate] = useState<string | null>(null);
+  const [date, setDate] = useState<Date>(new Date());
+  const [sessions, setSessions] = useState<SessionType[] | null>(null);
+  const [refresh, setRefresh] = useState<boolean>(false);
 
   useFocusEffect(
     useCallback(() => {
       async function fetchData() {
-        fetchWithTimeout(
-          "https://api.openf1.org/v1/sessions?session_name=Race&year=2025",
-          5000
-        )
-          .then((response: any) => response.json())
-          .then((json: any) => {
-            if (json && json.length > 0) {
-              const sortedSessions = json.sort(
-                (a: SessionType, b: SessionType) =>
-                  b.date_start.localeCompare(a.date_start)
-              );
+        try {
+          const sessionInfo = await fetchWithTimeout(
+            "https://api.openf1.org/v1/sessions?session_name=Race&year=2025",
+            5000
+          );
 
-              const selected = sortedSessions.find(
-                (session: SessionType) =>
-                  formatISODateToParts(session.date_start).day <=
-                  formatISODateToParts(date.toISOString()).day
-              );
+          if (!sessionInfo) return;
 
-              setSelectedSession(selected);
-              setSessions(sortedSessions);
-            }
-          })
-          .catch((error: any) => {
-            console.error("Error fetching data:", error);
-          });
+          const json: SessionType[] = await sessionInfo.json();
+          if (!json) return;
+
+          const sortedSessions = json.sort((a: SessionType, b: SessionType) =>
+            b.date_start.localeCompare(a.date_start)
+          );
+
+          const sessionsWeather: SessionType[] = [];
+
+          for (const session of sortedSessions) {
+            const weatherJson = await fetchWithTimeout(
+              `https://api.openf1.org/v1/weather?meeting_key=${
+                session.meeting_key
+              }&date<=${date.toISOString().split("T")[0]}`,
+              5000
+            );
+
+            const weatherInfo: WeatherType[] = await weatherJson.json();
+            session.weather = weatherInfo[weatherInfo.length - 1];
+
+            sessionsWeather.push(session);
+            setSessions(sessionsWeather);
+          }
+
+          setLatestUpdate(`Last updated: ${new Date().toLocaleString()}`);
+        } catch (error) {
+          console.log("Error " + error);
+          setRefresh((r) => !r);
+        }
       }
 
       fetchData();
-    }, [date])
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      async function fetchData() {
-        fetchWithTimeout(
-          `https://api.openf1.org/v1/weather?meeting_key=${
-            selectedSession.meeting_key
-          }&date<=${date.toISOString().split("T")[0]}`,
-          5000
-        )
-          .then((response: any) => response.json())
-          .then((json: WeatherType[]) => {
-            if (json && json.length > 0) setWeather(json[json.length - 1]);
-            else setWeather({} as WeatherType);
-          })
-          .catch((error: any) => {
-            console.error("Error fetching data:", error);
-            setWeather({} as WeatherType);
-          });
-        setLatestUpdate(`Last updated: ${new Date().toLocaleString()}`);
-      }
-
-      fetchData();
-    }, [selectedSession])
+    }, [refresh])
   );
 
   return (
     <UsableScreen>
       <View style={{ backgroundColor: "transparent" }}>
-        <Text style={styles.title}>
-          {`${selectedSession?.circuit_short_name || "General"}`} Track
-          Information
-        </Text>
+        <Text style={styles.title}>Track Information</Text>
         <Text style={styles.subtitle}>{latestUpdate}</Text>
       </View>
-      <FlatCalendar date={date} setInputBuyDate={setDate} />
       <View style={styles.container}>
-        {weather ? (
-          <View style={{ gap: 10, backgroundColor: "transparent" }}>
-            <View style={{ gap: 10, backgroundColor: "transparent" }}>
-              <Text style={styles.subtitle}>{loadedDate(weather)}</Text>
-            </View>
-            <Carrossel
-              items={loadIcons(weather)}
-              type={null}
-              setType={() => {}}
-              size={40}
-              width={"100%"}
-              justifyContent="space-between"
-              gap={2}
-            />
-          </View>
-        ) : (
-          <View style={{ height: 40, backgroundColor: "transparent" }} />
-        )}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            flexDirection: "row",
-            flexWrap: "wrap",
             paddingTop: 20,
             backgroundColor: "transparent",
             justifyContent: "space-between",
@@ -170,22 +148,17 @@ export default function TabOneScreen() {
             sessions.length > 0 &&
             sessions
               .sort((a, b) => b.date_start.localeCompare(a.date_start))
-              .map((session) => (
+              .map((session, index) => (
                 <View
                   key={session.session_key}
                   style={{
-                    padding: 5,
-                    aspectRatio: 1,
-                    height: 100,
+                    height: 120,
                     backgroundColor: dark.glass,
                     borderWidth: 1,
                     borderRadius: 10,
-                    borderColor:
-                      formatISODateToParts(weather.date).day ===
-                      formatISODateToParts(session?.date_start).day
-                        ? pallet.secundary
-                        : "transparent",
-                    justifyContent: "space-between",
+                    borderColor: index === 0 ? pallet.primary : dark.glass,
+                    gap: 15,
+                    justifyContent: "center",
                   }}
                 >
                   <View style={{ backgroundColor: "transparent" }}>
@@ -193,12 +166,51 @@ export default function TabOneScreen() {
                       {session.circuit_short_name.split("-")[0]}
                     </Text>
                     <Text style={styles.textCenterSm}>
-                      {session.country_name}
+                      {session.country_name} {session.date_start.split("T")[0]}
                     </Text>
                   </View>
-                  <Text style={styles.textCenterSm}>
-                    {session.date_start.split("T")[0]}
-                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: "transparent",
+                      flexDirection: "row",
+                      gap: 5,
+                      paddingHorizontal: 10,
+                    }}
+                  >
+                    {session.weather &&
+                      loadIcons(session.weather).map((icon) => {
+                        return (
+                          <View
+                            key={icon.label}
+                            style={{
+                              flex: 1,
+                              backgroundColor: "transparent",
+                              justifyContent: "center",
+                              gap: 5,
+                            }}
+                          >
+                            <View
+                              key={icon.label}
+                              style={{
+                                alignItems: "center",
+                                padding: 10,
+                                backgroundColor: "transparent",
+                              }}
+                            >
+                              {icon.icon}
+                            </View>
+                            <Text
+                              style={{
+                                ...styles.textCenterSm,
+                                color: icon.color,
+                              }}
+                            >
+                              {icon.value}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                  </View>
                 </View>
               ))}
         </ScrollView>
@@ -211,16 +223,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "transparent",
-    paddingTop: 30,
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
+    color: dark.textPrimary,
   },
   subtitle: {
     fontSize: 12,
     fontWeight: "normal",
     fontStyle: "italic",
+    color: dark.textPrimary,
   },
   separator: {
     marginVertical: 30,
@@ -228,10 +241,12 @@ const styles = StyleSheet.create({
     width: "80%",
   },
   textCenter: {
+    color: dark.textPrimary,
     textAlign: "center",
     fontSize: 12,
   },
   textCenterSm: {
+    color: dark.textPrimary,
     textAlign: "center",
     fontSize: 10,
   },

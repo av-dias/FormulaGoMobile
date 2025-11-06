@@ -52,8 +52,10 @@ export function getMonthsBetween(
   return (endYear - startYear) * 12 + (endMonth - startMonth);
 }
 
-export function formatISODateToParts(isoDateString: string): FormattedDateTime {
-  const dateObj = new Date(isoDateString);
+export function formatISODateToParts(
+  isoDateString: string | undefined
+): FormattedDateTime {
+  const dateObj = new Date(isoDateString || Date.now());
 
   // Helper to ensure single digits are padded (e.g., 5 -> "05")
   const pad = (num: number): string => String(num).padStart(2, "0");

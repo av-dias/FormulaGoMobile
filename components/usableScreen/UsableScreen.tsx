@@ -12,7 +12,7 @@ const UsableScreen: React.FC<PropsWithChildren> = (props) => {
       style={{
         flex: 1,
         backgroundColor: pallet.background,
-        padding: 40,
+        padding: 20,
         paddingTop: 60,
         gap: 10,
       }}

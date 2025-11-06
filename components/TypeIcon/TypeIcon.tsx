@@ -1,6 +1,6 @@
-import { View, StyleSheet } from "react-native";
-import { verticalScale } from "../../functions/responsive";
 import React from "react";
+import { StyleSheet, View, ViewStyle } from "react-native";
+import { verticalScale } from "../../functions/responsive";
 
 export const _styles = StyleSheet.create({
   container: {
@@ -22,7 +22,7 @@ export const _styles = StyleSheet.create({
 ``;
 type TypeIconProps = {
   icon: any;
-  customStyle?: any;
+  customStyle?: ViewStyle;
 };
 
 export const TypeIcon = ({ icon, customStyle }: TypeIconProps) => {

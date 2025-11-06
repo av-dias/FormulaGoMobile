@@ -7,3 +7,4 @@
 - 1.0.0
 
   - Initial Version with basic UI elements
+  - Upgrade home page with multi race data

@@ -1,3 +1,5 @@
+import { WeatherType } from "./WeatherType";
+
 export interface SessionType {
   /**
    * The unique identifier for the circuit where the event takes place.
@@ -71,4 +73,9 @@ export interface SessionType {
    * The year the event takes place.
    */
   year: number;
+
+  /**
+   * The weather information.
+   */
+  weather?: WeatherType;
 }
