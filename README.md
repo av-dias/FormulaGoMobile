@@ -8,3 +8,7 @@
 
   - Initial Version with basic UI elements
   - Upgrade home page with multi race data
+
+- 1.1.0
+  - Audio Component Player
+  - Cronologic audio record
