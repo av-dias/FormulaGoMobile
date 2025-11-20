@@ -7,21 +7,98 @@ import { DriverType } from "@/models/DriverType";
 import { F1RadioData } from "@/models/RadioType";
 import { dark, pallet } from "@/utility/colors";
 import { MaterialIcons } from "@expo/vector-icons";
-import { useAudioPlayer } from "expo-audio";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 
-const AudioRecord = ({ url }: { url: string }) => {
-  const player = useAudioPlayer(url);
+const AudioRecord = ({
+  drivers,
+  driverRadio: driver,
+}: {
+  drivers: DriverType[] | undefined;
+  driverRadio: F1RadioData;
+}) => {
+  const player = useAudioPlayer(driver.recording_url);
+  player.volume = 1;
+  const status = useAudioPlayerStatus(player);
 
   return (
-    <Pressable
-      onPress={() => {
-        player.play();
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingVertical: 10,
+        paddingHorizontal: 15,
       }}
     >
-      <MaterialIcons name="spatial-audio-off" size={24} color="black" />
-    </Pressable>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          padding: 0,
+          gap: 5,
+        }}
+      >
+        <Image
+          source={{
+            uri:
+              drivers?.find((d) => d.driver_number == driver.driver_number)
+                ?.headshot_url ?? undefined,
+          }}
+          style={{
+            width: 50,
+            aspectRatio: 1,
+            backgroundColor: "lightgray",
+            borderRadius: 10,
+            padding: 0,
+          }}
+        />
+        <View style={{ padding: 5 }}>
+          <Text style={{ color: dark.textPrimary, fontWeight: "bold" }}>
+            {
+              drivers?.find((d) => d.driver_number == driver.driver_number)
+                ?.name_acronym
+            }
+          </Text>
+          <Text style={{ color: dark.textPrimary, fontSize: 10 }}>
+            {
+              drivers?.find((d) => d.driver_number == driver.driver_number)
+                ?.driver_number
+            }
+          </Text>
+        </View>
+      </View>
+      <View
+        style={{
+          flex: status.duration,
+          flexDirection: "row",
+          height: 2,
+          borderRadius: 10,
+          paddingHorizontal: 20,
+        }}
+      >
+        <View
+          style={{
+            flex: status.currentTime,
+            backgroundColor: "lightblue",
+          }}
+        />
+        <View style={{ flex: status.duration - status.currentTime }} />
+      </View>
+      <Pressable
+        onPress={() => {
+          player.seekTo(0);
+          player.play();
+        }}
+      >
+        <MaterialIcons
+          name="spatial-audio-off"
+          size={24}
+          color={status.playing ? "lightblue" : "gray"}
+        />
+      </Pressable>
+    </View>
   );
 };
 
@@ -158,50 +235,15 @@ export default function TabTwoScreen() {
                 : d
             )
             .map((item, index) => (
-              <View key={index} style={{ gap: 2 }}>
-                <View style={{ paddingLeft: 3 }}>
-                  <Text>{`${new Date(item.date).toDateString()} ${new Date(
+              <View key={index} style={{ gap: 0 }}>
+                <View style={{ paddingLeft: 10 }}>
+                  <Text>{`${new Date(
+                    item.date
+                  ).toLocaleDateString()} ${new Date(
                     item.date
                   ).toLocaleTimeString()}`}</Text>
                 </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingVertical: 10,
-                    paddingHorizontal: 15,
-                    borderRadius: 10,
-                    borderWidth: 1,
-                    borderColor: "lightgray",
-                  }}
-                >
-                  <View
-                    style={{
-                      alignItems: "center",
-                      padding: 0,
-                      gap: 2,
-                    }}
-                  >
-                    <Image
-                      source={{
-                        uri:
-                          drivers?.find(
-                            (d) => d.driver_number == item.driver_number
-                          )?.headshot_url ?? undefined,
-                      }}
-                      style={{ width: 40, aspectRatio: 1 }}
-                    />
-                    <Text style={{ color: dark.textPrimary }}>
-                      {
-                        drivers?.find(
-                          (d) => d.driver_number == item.driver_number
-                        )?.name_acronym
-                      }
-                    </Text>
-                  </View>
-                  <AudioRecord url={item.recording_url} />
-                </View>
+                <AudioRecord drivers={drivers} driverRadio={item} />
               </View>
             ))}
       </ScrollView>
