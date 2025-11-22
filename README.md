@@ -16,3 +16,6 @@
 
 - 1.2.0
   - Improved audio record UI with visual playtime tracking
+  - Polish on audio player UI
+  - Optimize performance with flat list and session storage
+  - Allow audio selection by session
