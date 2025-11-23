@@ -1,14 +1,22 @@
-import { StyleSheet } from "react-native";
+import {
+  ImageBackground,
+  ImageSourcePropType,
+  StyleSheet,
+  ViewStyle,
+} from "react-native";
 
 import { fetchWithTimeout } from "@/api/fetch";
+import LoadingIndicator from "@/components/loadingIndicator";
 import { Text, View } from "@/components/Themed";
 import UsableScreen from "@/components/usableScreen";
 import { SessionType } from "@/models/SessionType";
 import { WeatherType } from "@/models/WeatherType";
-import { dark, pallet } from "@/utility/colors";
+import { dark } from "@/utility/colors";
 import { icons } from "@/utility/icons";
+import { imageLoader } from "@/utility/imageLoader";
+import { delay } from "@/utility/timer";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { ReactElement, useCallback, useState } from "react";
 import { ScrollView } from "react-native-gesture-handler";
 
 const loadPressureLabel = (pressure: number) => {
@@ -20,8 +28,8 @@ const loadPressureLabel = (pressure: number) => {
 const loadTemperatureColor = (temperature: number) => {
   if (temperature < 10) return "lightblue";
   if (temperature < 18) return "#0030cfff";
-  if (temperature < 20) return "lightgreen";
-  if (temperature < 30) return "#c5b802ff";
+  if (temperature < 20) return "green";
+  if (temperature < 30) return "#948d28ff";
   if (temperature < 40) return "orange";
   if (temperature < 50) return "#db0000ff";
   return "transparent";
@@ -76,15 +84,46 @@ const loadIcons = (data: WeatherType) => {
   });
 };
 
+const getImageMapKey = (url: string) => {
+  return url.toLocaleLowerCase().replaceAll(" ", "").replaceAll("-", "");
+};
+
+const ImageView = ({
+  children,
+  url,
+  imageMap,
+  style,
+}: {
+  children: ReactElement;
+  url: string;
+  imageMap: { [name: string]: ImageSourcePropType };
+  style: ViewStyle;
+}) => {
+  {
+    let key = Object.keys(imageMap).find((i) => i == getImageMapKey(url));
+    if (!key) key = "alternative";
+
+    return (
+      <ImageBackground style={style} source={imageMap[key]}>
+        {children}
+      </ImageBackground>
+    );
+  }
+};
+
 export default function TabOneScreen() {
   const [latestUpdate, setLatestUpdate] = useState<string | null>(null);
   const [date, setDate] = useState<Date>(new Date());
-  const [sessions, setSessions] = useState<SessionType[] | null>(null);
+  const [sessions, setSessions] = useState<SessionType[] | null>([]);
   const [refresh, setRefresh] = useState<boolean>(false);
+  const [isLoading, setIsLoadding] = useState(false);
+  const trackImage = imageLoader;
 
   useFocusEffect(
     useCallback(() => {
       async function fetchData() {
+        setIsLoadding(true);
+
         try {
           const sessionInfo = await fetchWithTimeout(
             "https://api.openf1.org/v1/sessions?session_name=Race&year=2025",
@@ -103,21 +142,31 @@ export default function TabOneScreen() {
           const sessionsWeather: SessionType[] = [];
 
           for (const session of sortedSessions) {
-            const weatherJson = await fetchWithTimeout(
+            fetchWithTimeout(
               `https://api.openf1.org/v1/weather?meeting_key=${
                 session.meeting_key
               }&date<=${date.toISOString().split("T")[0]}`,
               5000
-            );
+            )
+              .then((response: any) => response.json())
+              .then((weatherInfo: WeatherType[]) => {
+                session.weather = weatherInfo[weatherInfo.length - 1];
+                if (
+                  !sessions?.find(
+                    (s) => s.weather?.date == session.weather?.date
+                  )
+                ) {
+                  sessionsWeather.push(session);
+                  setSessions([...sessionsWeather]);
+                }
+              });
 
-            const weatherInfo: WeatherType[] = await weatherJson.json();
-            session.weather = weatherInfo[weatherInfo.length - 1];
-
-            sessionsWeather.push(session);
-            setSessions(sessionsWeather);
+            await delay(350);
           }
 
+          console.log(`Last updated: ${new Date().toLocaleString()}`);
           setLatestUpdate(`Last updated: ${new Date().toLocaleString()}`);
+          setIsLoadding(false);
         } catch (error) {
           console.log("Error " + error);
           setRefresh((r) => !r);
@@ -130,6 +179,7 @@ export default function TabOneScreen() {
 
   return (
     <UsableScreen>
+      <LoadingIndicator isLoading={isLoading} />
       <View style={{ backgroundColor: "transparent" }}>
         <Text style={styles.title}>Track Information</Text>
         <Text style={styles.subtitle}>{latestUpdate}</Text>
@@ -148,70 +198,96 @@ export default function TabOneScreen() {
             sessions.length > 0 &&
             sessions
               .sort((a, b) => b.date_start.localeCompare(a.date_start))
-              .map((session, index) => (
-                <View
-                  key={session.session_key}
+              .map((session) => (
+                <ImageView
+                  key={session.circuit_key}
+                  imageMap={trackImage}
+                  url={session.circuit_short_name}
                   style={{
-                    height: 120,
+                    height: 160,
                     backgroundColor: dark.glass,
-                    borderWidth: 1,
                     borderRadius: 10,
-                    borderColor: index === 0 ? pallet.primary : dark.glass,
                     gap: 15,
-                    justifyContent: "center",
+                    paddingVertical: 10,
+                    justifyContent: "space-between",
+                    overflow: "hidden",
                   }}
                 >
-                  <View style={{ backgroundColor: "transparent" }}>
-                    <Text style={styles.textCenter}>
-                      {session.circuit_short_name.split("-")[0]}
-                    </Text>
-                    <Text style={styles.textCenterSm}>
-                      {session.country_name} {session.date_start.split("T")[0]}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      backgroundColor: "transparent",
-                      flexDirection: "row",
-                      gap: 5,
-                      paddingHorizontal: 10,
-                    }}
-                  >
-                    {session.weather &&
-                      loadIcons(session.weather).map((icon) => {
-                        return (
-                          <View
-                            key={icon.label}
-                            style={{
-                              flex: 1,
-                              backgroundColor: "transparent",
-                              justifyContent: "center",
-                              gap: 5,
-                            }}
-                          >
+                  <>
+                    <View
+                      style={{
+                        backgroundColor: "transparent",
+                        justifyContent: "center",
+                        alignContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <View
+                        style={{
+                          backgroundColor: dark.darkerGlass,
+                          width: "auto",
+                          paddingHorizontal: 10,
+                          borderRadius: 10,
+                        }}
+                      >
+                        <Text>
+                          <Text style={styles.textCenter}>
+                            {`${session.circuit_short_name.split("-")[0]} `}
+                          </Text>
+                          <Text style={styles.textCenterSm}>
+                            {session.country_name}
+                          </Text>
+                        </Text>
+                        <Text style={styles.textCenterSm}>
+                          {session.date_start.split("T")[0]}
+                        </Text>
+                      </View>
+                    </View>
+                    <View
+                      style={{
+                        backgroundColor: "transparent",
+                        flexDirection: "row",
+                        gap: 5,
+                        paddingHorizontal: 10,
+                      }}
+                    >
+                      {session.weather &&
+                        loadIcons(session.weather).map((icon) => {
+                          return (
                             <View
-                              key={icon.label}
+                              key={session.weather?.meeting_key + icon.label}
                               style={{
-                                alignItems: "center",
-                                padding: 10,
-                                backgroundColor: "transparent",
+                                flex: 1,
+                                backgroundColor: dark.darkerGlass,
+                                borderRadius: 10,
+                                justifyContent: "center",
+                                gap: 5,
+                                padding: 2,
                               }}
                             >
-                              {icon.icon}
+                              <View
+                                style={{
+                                  alignItems: "center",
+                                  padding: 5,
+                                  backgroundColor: "transparent",
+                                }}
+                              >
+                                {icon.icon}
+                              </View>
+                              <Text
+                                style={{
+                                  ...styles.textCenterSm,
+                                  color: icon.color,
+                                }}
+                              >
+                                {icon.value}
+                              </Text>
                             </View>
-                            <Text
-                              style={{
-                                ...styles.textCenterSm,
-                                color: icon.color,
-                              }}
-                            >
-                              {icon.value}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                  </View>
-                </View>
+                          );
+                        })}
+                    </View>
+                  </>
+                </ImageView>
               ))}
         </ScrollView>
       </View>
@@ -243,7 +319,8 @@ const styles = StyleSheet.create({
   textCenter: {
     color: dark.textPrimary,
     textAlign: "center",
-    fontSize: 12,
+    fontWeight: "bold",
+    fontSize: 16,
   },
   textCenterSm: {
     color: dark.textPrimary,

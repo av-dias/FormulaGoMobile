@@ -15,7 +15,11 @@
   - Cronologic audio record
 
 - 1.2.0
+
   - Improved audio record UI with visual playtime tracking
   - Polish on audio player UI
   - Optimize performance with flat list and session storage
   - Allow audio selection by session
+
+- 1.3.0
+  - Provide a polished race track information with track image
