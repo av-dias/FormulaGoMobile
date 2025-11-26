@@ -23,3 +23,4 @@
 
 - 1.3.0
   - Provide a polished race track information with track image
+  - Allow session information to be loaded as soon as P1 starts

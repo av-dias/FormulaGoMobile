@@ -125,17 +125,54 @@ export default function TabOneScreen() {
         setIsLoadding(true);
 
         try {
-          const sessionInfo = await fetchWithTimeout(
+          let qualify: SessionType[] = [],
+            practice: SessionType[] = [],
+            lastQualify: SessionType | undefined,
+            lastPractice: SessionType | undefined;
+
+          const sessionInfoPractice = await fetchWithTimeout(
+            "https://api.openf1.org/v1/sessions?session_name=Practice 1&year=2025",
+            5000
+          );
+
+          if (sessionInfoPractice) {
+            practice = await sessionInfoPractice.json();
+            lastPractice = practice.sort((a: SessionType, b: SessionType) =>
+              b.date_start.localeCompare(a.date_start)
+            )[0];
+          }
+
+          await delay(350);
+          const sessionInfoQualify = await fetchWithTimeout(
+            "https://api.openf1.org/v1/sessions?session_name=Qualifying&year=2025",
+            5000
+          );
+
+          if (sessionInfoQualify) {
+            qualify = await sessionInfoQualify.json();
+            lastQualify = qualify.sort((a: SessionType, b: SessionType) =>
+              b.date_start.localeCompare(a.date_start)
+            )[0];
+          }
+
+          await delay(350);
+          const sessionInfoRace = await fetchWithTimeout(
             "https://api.openf1.org/v1/sessions?session_name=Race&year=2025",
             5000
           );
 
-          if (!sessionInfo) return;
+          if (!sessionInfoRace) return;
 
-          const json: SessionType[] = await sessionInfo.json();
-          if (!json) return;
+          const race: SessionType[] = await sessionInfoRace.json();
+          if (!race) return;
 
-          const sortedSessions = json.sort((a: SessionType, b: SessionType) =>
+          if (lastQualify && qualify.length > race.length) {
+            race.push(lastQualify);
+          } else if (lastPractice && practice.length > race.length) {
+            race.push(lastPractice);
+          }
+
+          const sortedSessions = race.sort((a: SessionType, b: SessionType) =>
             b.date_start.localeCompare(a.date_start)
           );
 
